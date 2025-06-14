@@ -1,6 +1,9 @@
 """
 Designed to work on the following website:
 https://minesweeperonline.com/#beginner
+
+Works on 100% and 200% scale but not 150% because it uses slightly different
+colors so game board location logic would need to be changed
 """
 import pyautogui
 
@@ -18,30 +21,45 @@ def main():
     if board_coord == None:
         print("Error: Failed to locate game board")
         return 1
-    print(f"Target color found at {board_coord}")
     
     # Get first tile location and tile width
     tile_coord, tile_width = getTileInfo(board_coord)
 
 # Returns the top left corner of the first tile
-# and the width of each tile
+# and the width/height of each tile
 def getTileInfo(board_coord):
     x, y = board_coord
     screenshot = pyautogui.screenshot()
     
     # Find inner corner of top menu (has correct x coordinate)
-    while screenshot.getpixel((x, y)) != TARGETDARK:
-        #print(f"Color: {screenshot.getpixel((x, y))} found at ({x}, {y})")
+    while screenshot.getpixel((x, y)) != TARGETDARK:    # Move through TARGETCOLOR to TARGETDARK (technically redundant with next while but left in for understandability)
         x += 1
         y += 1
-    while screenshot.getpixel((x, y)) != TARGETCOLOR:
+    while screenshot.getpixel((x, y)) != TARGETBACK:    # Move through TARGETDARK to TARGETBACK
         x += 1
         y += 1
     
-    print(x, y)
-    print(f"Left: {screenshot.getpixel((x - 1, y))}, Up: {screenshot.getpixel((x, y - 1))}")
+    # Move downwards until the top left white pixel of the first tile is located
+    while screenshot.getpixel((x, y)) != BACKGROUNDCOLOR:   # Move to white border
+        y += 1
+    while screenshot.getpixel((x, y)) != TARGETDARK:        # Move past white to dark
+        y += 1
+    while screenshot.getpixel((x, y)) != BACKGROUNDCOLOR:   # Move until white reached again which should be the tile corner
+        y += 1
     
-    return None, None
+    # Tile corner found
+    tile_coord = (x, y)
+    
+    # Move right to next tile to determine width
+    while screenshot.getpixel((x, y)) != TARGETCOLOR:       # There is one pixel of TARGETCOLOR so first move there
+        x += 1
+    while screenshot.getpixel((x, y)) != BACKGROUNDCOLOR:   # Move past TARGETCOLOR to next tile
+        x += 1
+    
+    # Width and height are equal since tiles are square
+    width = x - tile_coord[0]
+    
+    return tile_coord, width
 
 # Returns the top left corner of the game board
 # Specifically the first pixel on the top left which is
@@ -58,7 +76,6 @@ def getGameLocation():
         for x in range(screen_width):
             # Test for target color at pixel (x, y)
             if screenshot.getpixel((x, y)) == TARGETCOLOR:
-                print(f"Found at ({x}, {y})")
                 # Test if down right pixel (x + 1, y + 1) is also target color
                 # and check if up left pixel (x - 1, y - 1) is background color
                 # to ensure pixel is actually from game board
