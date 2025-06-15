@@ -28,8 +28,39 @@ def main():
     # Determine size of game board
     board_width, board_height = getBoardSize(tile_coord, tile_width)
     print(board_width, "x", board_height)
+    
+    val = clickTile((15, 10), False, board_width, board_height, tile_coord, tile_width)
+    if val == 1:
+        print("Click failed")
+
+# Clicks a selected tile from its matrix coordinates (pos[0], pos[1])
+# and left clicks if rClick is false, otherwise right clicks
+# Return values:
+# 0 on success
+# 1 on faliure when inputted pos is not a valid tile
+def clickTile(pos, rClick, board_width, board_height, tile_coord, tile_width):
+    x, y = pos
+    
+    # Check if coordinates are within tile bounds
+    if x < 0 or x >= board_width or y < 0 or y >= board_height:
+        # Out of bounds
+        return 1
+    
+    # Move to the center of the tile
+    pyautogui.moveTo((tile_coord[0] + (x * tile_width) + (tile_width / 2)), (tile_coord[1] + (y * tile_width) + (tile_width / 2)))
+    
+    # Click button depending on rClick
+    if rClick:  # Right click
+        pyautogui.rightClick()
+    else:       # Left click
+        pyautogui.click()
+    
+    return 0
 
 # Determines the how many tiles make up the width and height of the game board
+# Return values:
+# int width     : The number of tiles on the board horizontally
+# int height    : The number of tiles on the board vertically
 def getBoardSize(tile_coord, tile_width):
     x, y = tile_coord
     screenshot = pyautogui.screenshot()
@@ -49,8 +80,8 @@ def getBoardSize(tile_coord, tile_width):
     
     return width, height
 
-# Returns the top left corner of the first tile
-# and the width/height of each tile
+# Returns the top left corner of the first tile:    tuple tile_coord = (int x, int y)
+# and the width/height of each tile:                int width
 def getTileInfo(board_coord):
     x, y = board_coord
     screenshot = pyautogui.screenshot()
@@ -88,6 +119,9 @@ def getTileInfo(board_coord):
 # Returns the top left corner of the game board
 # Specifically the first pixel on the top left which is
 # the specified TARGETCOLOR
+# Return values:
+# tuple (int x, int y)  : the pixel coordinates of the top left corner of the game
+# None                  : when the target cannot be found
 def getGameLocation():
     # Get screen size
     screen_width, screen_height = pyautogui.size()
