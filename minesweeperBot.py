@@ -1,6 +1,6 @@
 """
 Designed to work on the following website:
-https://minesweeperonline.com/#beginner
+https://minesweeperonline.com
 
 Works on 100% and 200% scale but not 150% because it uses slightly different
 colors so game board location logic would need to be changed
@@ -24,6 +24,30 @@ def main():
     
     # Get first tile location and tile width
     tile_coord, tile_width = getTileInfo(board_coord)
+    
+    # Determine size of game board
+    board_width, board_height = getBoardSize(tile_coord, tile_width)
+    print(board_width, "x", board_height)
+
+# Determines the how many tiles make up the width and height of the game board
+def getBoardSize(tile_coord, tile_width):
+    x, y = tile_coord
+    screenshot = pyautogui.screenshot()
+    
+    width = height = 0
+    
+    # Calculate width
+    while screenshot.getpixel((x + tile_width - 1, y)) == TARGETCOLOR or screenshot.getpixel((x + tile_width - 1, y)) == TARGETBACK:
+        x += tile_width
+        width += 1
+    
+    # Calculate height
+    x = tile_coord[0]
+    while screenshot.getpixel((x, y + tile_width - 1)) == TARGETCOLOR or screenshot.getpixel((x, y + tile_width - 1)) == TARGETBACK:
+        y += tile_width
+        height += 1
+    
+    return width, height
 
 # Returns the top left corner of the first tile
 # and the width/height of each tile
