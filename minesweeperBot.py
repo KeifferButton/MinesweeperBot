@@ -10,6 +10,7 @@ pyautogui.PAUSE = 0.015
 import sys
 import time
 import copy
+import keyboard
 
 """TARGET COLOR:"""
 TARGETCOLOR = (189, 189, 189)       # Border color of game
@@ -17,10 +18,12 @@ BACKGROUNDCOLOR = (255, 255, 255)   # Background color of website (default white
 TARGETDARK = (123, 123, 123)        # Darker border color of game
 TARGETBACK = (192, 192, 192)        # Interior background of game which is slightly different that TARGETCOLOR for some reason
 
+'''FORCE EXIT KEY'''
+EXITKEY = 'esc'
+
 '''
 Goals:
 Allow program to start clicking at beginning (determine best location to click for start or do random)
-Add an abort key which instantly stops program
 Complete chooseBestAction with deep scan / guessing mode
 Improve visuals be removing previous prints, also add statistics
 Add looping mode in seperate file which tracks wins vs losses (will require exiting name enter menu)
@@ -53,6 +56,8 @@ def main():
     counter = 0
     doScan = True
     while True:
+        checkForForceExit()
+        
         print("Loop:", counter)
         counter += 1
         life = checkForWin(life_pix1, life_pix2)
@@ -74,6 +79,10 @@ def main():
         
         clickTile(action, rClick, board_width, board_height, tile_coord, tile_width)
         
+def checkForForceExit():
+    if keyboard.is_pressed(EXITKEY):
+        print("Emergency stop triggered")
+        sys.exit(0)
     
 # gets the position of the yellow smiley face which determines whether you're alive, dead, or have won
 # Return value:
