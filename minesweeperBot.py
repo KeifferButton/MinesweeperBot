@@ -32,17 +32,139 @@ def main():
     board_width, board_height = getBoardSize(tile_coord, tile_width)
     print(board_width, "x", board_height)
     
+    # 2D matrix which will store the state of each tile
     game_matrix = [[None for _ in range(board_width)] for _ in range (board_height)]
+    
+    # Get the location of the smiley face
+    life_pix1, life_pix2 = getLifeLocation(board_coord, tile_coord)
     
     input("Please update gamestate")
     
-    if getGameState(game_matrix, board_width, board_height, tile_coord, tile_width) == 1:
-        print("Failed to scan")
+    life = checkForWin(life_pix1, life_pix2)
+    if life == 0:
+        print("alive")
+    elif life == 1:
+        print("dead")
+    else:
+        print("won")
     
-    print('\n'.join([' '.join(map(str, row)) for row in game_matrix]).replace("None", "☐").replace("0", " "))
+    '''
+    while True:
+        pyautogui.moveTo(board_coord)
+        if getGameState(game_matrix, board_width, board_height, tile_coord, tile_width) == 1:
+            print("Failed to scan")
+        
+        print('\n'.join([' '.join(map(str, row)) for row in game_matrix]).replace("None", "☐").replace("0", " "))
+        
+        action, rClick, chance = chooseBestAction(game_matrix, board_width, board_height)
+        
+        clickTile(action, rClick, board_width, board_height, tile_coord, tile_width)
+        '''
     
+# gets the position of the yellow smiley face which determines whether you're alive, dead, or have won
+# Return value:
+# tuple pix1 (int x, int y): The coordinates of a pixel which needs to be checked (x + 6, y - 3)
+# tuple pix2 (int x, int y): The coordinates of a pixel which needs to be checked (x + 4, y - 1)
+def getLifeLocation(board_coord, tile_coord):
+    screenshot = pyautogui.screenshot()
     
-# Gets the current state of the gameboard ie where the numbers are, and sets them to the inputted game_matrix
+    # Align coords with smiley
+    x = tile_coord[0]
+    y = (board_coord[1] + tile_coord[1]) / 2
+    
+    # Move right until yellow detected
+    while screenshot.getpixel((x, y)) != (255, 255, 0):
+        x += 1
+        
+    # Once yellow is hit, move back until off black to get how many real pixels make up one smiley pixel
+    pixelSize = 0
+    while screenshot.getpixel((x, y)) != (0, 0, 0):
+        x -= 1
+        pixelSize += 1
+       
+    # Return pixels to be checked
+    pix1 = (x + 6 * pixelSize, y + 3 * pixelSize)
+    pix2 = (x + 4 * pixelSize, y + pixelSize)
+    return pix1, pix2
+    
+# Determines whether you're alive, dead, or have won the game
+# Return values:
+# 0: alive
+# 1: dead
+# 2: won
+def checkForWin(pix1, pix2):
+    screenshot = pyautogui.screenshot()
+    
+    # If at pixel (x + 6, y - 3) there is black, then still alive or win. (technically y + 3 because down is positive)
+    if screenshot.getpixel(pix1) == (0, 0, 0):
+        # If at pixel (x + 4, y - 1) there is black, then alive
+        if screenshot.getpixel(pix2) == (0, 0, 0):
+            return 0
+        # Otherwise, win
+        else:
+            return 2
+    # Otherwise, dead
+    else:
+        return 1
+    
+
+# Determines the best next action with the highest probability of living
+# Return values:
+# tuple tile: (int x, int y):   The tile coordinate to click
+# boolean rClick:               True when action is right click (to place flag)
+# float chance:                 The probability of staying alive after the click. 0 when 100% survival rate
+def chooseBestAction(game_matrix, board_width, board_height):
+    # Quick scan for any obvious actions
+    for y in range(board_height):
+        for x in range(board_width):
+            # Count up number of flags and up tiles around number tile
+            if game_matrix[y][x] != None and game_matrix[y][x] != -1:
+                flags = up = 0
+                for j in range(-1, 1):
+                    for i in range(-1, 1):
+                        # Bounds check
+                        if y + j < 0 or y + j >= board_height or x + i < 0 or x + i >= board_width:
+                            continue
+                        
+                        if j != 0 and i != 0:
+                            value = game_matrix[y + j][x + i]
+                            # Up tile
+                            if value == None:
+                                up += 1
+                            # Flag
+                            elif value == -1:
+                                flags += 1
+                
+                # Easy action detected
+                if flags == game_matrix[y][x] or (up > 0 and flags + up == game_matrix[y][x]):
+                    useFlag = True
+                    # If the number of flags == the tile number, then the rest of the tiles must not be bombs
+                    if flags == game_matrix[y][x]:
+                        useFlag = False
+                    # Otherwise, the number of flags + up tiles == the tile number, then the rest of the up tiles must be bombs
+                    
+                    # Scan for first tile meeting useFlag requirement
+                    for j in range(-1, 1):
+                        for i in range(-1, 1):
+                            # Bounds check
+                            if y + j < 0 or y + j >= board_height or x + i < 0 or x + i >= board_width:
+                                continue
+                            
+                            value = game_matrix[y + j][x + i]
+                            
+                            # If up tile found
+                            if value == None:
+                                # Plant flag
+                                if useFlag:
+                                    game_matrix[y + j][x + i] = -1
+                                    return (x + i, y + j), True, 0.0
+                                # Dig tile
+                                else:
+                                    return (x + i, y + j), False, 0.0
+            
+                            
+
+# Gets the current state of the game board ie where the numbers are, and sets them to the inputted game_matrix
 # Return values:
 # 0: Success
 # 1: Failed to scan on third attempt; game likely didn't update
