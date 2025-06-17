@@ -189,9 +189,58 @@ def chooseBestAction(game_matrix, board_width, board_height):
                                 else:
                                     return (x + i, y + j), False, 0.0
     
+    
+    # If no obvious actions found by quick scan:
+    # Deep scan: Checks all possible bomb layouts, sums them for each tile, and returns the tile with 
+    # the fewest total bombs across all possibilities aka with the lowest probability of death
+    
+    # Matrix which stores the number of times each tile contains a bomb out of all valid arrangements
+    bomb_matrix = [[0 for _ in range(board_width)] for _ in range (board_height)]
+    # Set of all not flagged up tiles adjacent to a number tile
+    up_tiles = {}
+    
+    # Loop through every number tile
+    for y in range(board_height):
+        for x in range(board_width):
+            if game_matrix[y][x] != None and game_matrix[y][x] != -1:
+                # Create a set of all up tiles (not flagged) adjacent to a number tile
+                for j in range(-1, 2):
+                    for i in range(-1, 2):
+                        # Bounds check
+                        if y + j < 0 or y + j >= board_height or x + i < 0 or x + i >= board_width:
+                            continue
+                        
+                        if (j != 0 or i != 0) and game_matrix[y + j][x + i] == None:
+                            up_tiles.add((x + i, y + j))
+     
+    # Sets used by checkAllLayouts which store coordinates which are set as a bomb tile or free tile (not bomb)
+    bomb_set = {}
+    free_set = {}
+    checkAllLayouts(game_matrix, bomb_matrix, up_tiles, bomb_set, free_set, board_width, board_height)
+    
+    # Should never be reached
     print("Fell off bottom")
     sys.exit(0)
                             
+# Helper function of chooseBestAction()
+# Checks every possible layout of bombs on tiles adjacent to number tiles
+def checkAllLayouts(game_matrix, bomb_matrix, up_tiles, old_bomb_set, old_free_set, board_width, board_height):
+    # Create copies of bomb_set and free_set to not modify the originals
+    bomb_set = old_bomb_set.copy()
+    free_set = old_free_set.copy()
+    
+    # For every element in up_tiles set
+    if len(up_tiles) != 0:
+        tile = up_tiles.pop()
+        
+        # Set popped tile as either bomb or free tile, recur
+        checkAllLayouts(game_matrix, bomb_matrix, up_tiles, bomb_set.add(tile), free_set, board_width, board_height)
+        checkAllLayouts(game_matrix, bomb_matrix, up_tiles, bomb_set, free_set.add(tile), board_width, board_height)
+    # Once all elements in either bomb_set or free_set, check if configuration is valid based on number tiles
+    else:
+        # 
+                
+    
 
 # Gets the current state of the game board ie where the numbers are, and sets them to the inputted game_matrix
 # Return values:
