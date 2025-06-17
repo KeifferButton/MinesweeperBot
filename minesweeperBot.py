@@ -6,6 +6,7 @@ Works on 100% and 200% scale but not 150% because it uses slightly different
 colors so game board location logic would need to be changed
 """
 import pyautogui
+pyautogui.PAUSE = 0.015
 import sys
 import time
 import copy
@@ -15,6 +16,15 @@ TARGETCOLOR = (189, 189, 189)       # Border color of game
 BACKGROUNDCOLOR = (255, 255, 255)   # Background color of website (default white)
 TARGETDARK = (123, 123, 123)        # Darker border color of game
 TARGETBACK = (192, 192, 192)        # Interior background of game which is slightly different that TARGETCOLOR for some reason
+
+'''
+Goals:
+Allow program to start clicking at beginning (determine best location to click for start or do random)
+Add an abort key which instantly stops program
+Complete chooseBestAction with deep scan / guessing mode
+Improve visuals be removing previous prints, also add statistics
+Add looping mode in seperate file which tracks wins vs losses (will require exiting name enter menu)
+'''
 
 def main():
     print("Started")
@@ -40,26 +50,30 @@ def main():
     
     input("Please update gamestate")
     
-    life = checkForWin(life_pix1, life_pix2)
-    if life == 0:
-        print("alive")
-    elif life == 1:
-        print("dead")
-    else:
-        print("won")
-    
-    '''
+    counter = 0
+    doScan = True
     while True:
-        pyautogui.moveTo(board_coord)
-        if getGameState(game_matrix, board_width, board_height, tile_coord, tile_width) == 1:
-            print("Failed to scan")
+        print("Loop:", counter)
+        counter += 1
+        life = checkForWin(life_pix1, life_pix2)
+        if life != 0:
+            break
         
-        print('\n'.join([' '.join(map(str, row)) for row in game_matrix]).replace("None", "☐").replace("0", " "))
+        pyautogui.moveTo(board_coord)
+        if doScan:
+            if getGameState(game_matrix, board_width, board_height, tile_coord, tile_width) == 1:
+                print("Failed to scan")
+        doScan = True
+        
+        print('\n'.join([' '.join(map(str, row)) for row in game_matrix]).replace("None", "☐").replace("0", " ").replace("-1", "^"))
         
         action, rClick, chance = chooseBestAction(game_matrix, board_width, board_height)
         
+        if rClick:
+            doScan = False
+        
         clickTile(action, rClick, board_width, board_height, tile_coord, tile_width)
-        '''
+        
     
 # gets the position of the yellow smiley face which determines whether you're alive, dead, or have won
 # Return value:
@@ -78,13 +92,17 @@ def getLifeLocation(board_coord, tile_coord):
         
     # Once yellow is hit, move back until off black to get how many real pixels make up one smiley pixel
     pixelSize = 0
-    while screenshot.getpixel((x, y)) != (0, 0, 0):
+    x -= 1
+    while screenshot.getpixel((x, y)) == (0, 0, 0):
         x -= 1
         pixelSize += 1
+       
+    x += 1
        
     # Return pixels to be checked
     pix1 = (x + 6 * pixelSize, y + 3 * pixelSize)
     pix2 = (x + 4 * pixelSize, y + pixelSize)
+    
     return pix1, pix2
     
 # Determines whether you're alive, dead, or have won the game
@@ -120,13 +138,13 @@ def chooseBestAction(game_matrix, board_width, board_height):
             # Count up number of flags and up tiles around number tile
             if game_matrix[y][x] != None and game_matrix[y][x] != -1:
                 flags = up = 0
-                for j in range(-1, 1):
-                    for i in range(-1, 1):
+                for j in range(-1, 2):
+                    for i in range(-1, 2):
                         # Bounds check
                         if y + j < 0 or y + j >= board_height or x + i < 0 or x + i >= board_width:
                             continue
                         
-                        if j != 0 and i != 0:
+                        if j != 0 or i != 0:
                             value = game_matrix[y + j][x + i]
                             # Up tile
                             if value == None:
@@ -144,8 +162,8 @@ def chooseBestAction(game_matrix, board_width, board_height):
                     # Otherwise, the number of flags + up tiles == the tile number, then the rest of the up tiles must be bombs
                     
                     # Scan for first tile meeting useFlag requirement
-                    for j in range(-1, 1):
-                        for i in range(-1, 1):
+                    for j in range(-1, 2):
+                        for i in range(-1, 2):
                             # Bounds check
                             if y + j < 0 or y + j >= board_height or x + i < 0 or x + i >= board_width:
                                 continue
@@ -161,7 +179,9 @@ def chooseBestAction(game_matrix, board_width, board_height):
                                 # Dig tile
                                 else:
                                     return (x + i, y + j), False, 0.0
-            
+    
+    print("Fell off bottom")
+    sys.exit(0)
                             
 
 # Gets the current state of the game board ie where the numbers are, and sets them to the inputted game_matrix
