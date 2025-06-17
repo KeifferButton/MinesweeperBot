@@ -6,6 +6,9 @@ Works on 100% and 200% scale but not 150% because it uses slightly different
 colors so game board location logic would need to be changed
 """
 import pyautogui
+import sys
+import time
+import copy
 
 """TARGET COLOR:"""
 TARGETCOLOR = (189, 189, 189)       # Border color of game
@@ -29,9 +32,139 @@ def main():
     board_width, board_height = getBoardSize(tile_coord, tile_width)
     print(board_width, "x", board_height)
     
-    val = clickTile((15, 10), False, board_width, board_height, tile_coord, tile_width)
-    if val == 1:
-        print("Click failed")
+    game_matrix = [[None for _ in range(board_width)] for _ in range (board_height)]
+    
+    input("Please update gamestate")
+    
+    if getGameState(game_matrix, board_width, board_height, tile_coord, tile_width) == 1:
+        print("Failed to scan")
+    
+    print('\n'.join([' '.join(map(str, row)) for row in game_matrix]).replace("None", "☐").replace("0", " "))
+    
+    
+# Gets the current state of the gameboard ie where the numbers are, and sets them to the inputted game_matrix
+# Return values:
+# 0: Success
+# 1: Failed to scan on third attempt; game likely didn't update
+# 2: Function dropped off bottom which should never happen
+def getGameState(game_matrix, board_width, board_height, tile_coord, tile_width):
+    # Loop to allow for retries in case board has not yet been updated since last scan
+    # Ideally the loop's contents should only execute once
+    for tries in range(3):
+        screenshot = pyautogui.screenshot()
+        x = y = 0
+        temp_matrix = copy.deepcopy(game_matrix)
+        
+        # Scan each tile
+        for y in range(board_height):
+            for x in range(board_width):
+                # Only need to check tile if it was previously up
+                if temp_matrix[y][x] != None:
+                    # Tile already down
+                    continue
+                
+                # Check if tile is still up
+                if screenshot.getpixel(((tile_coord[0] + x * tile_width), (tile_coord[1] + y * tile_width))) == BACKGROUNDCOLOR:
+                    continue
+                
+                # Scan across x of tile (middle of y) for a valid color
+                scannedColors = []
+                matchFailed = True
+                for i in range(int(tile_width / 4), tile_width - int(tile_width / 4)):
+                    pixelColor = screenshot.getpixel(((tile_coord[0] + x * tile_width + i), (tile_coord[1] + (y * tile_width) + (tile_width / 2))))
+                    scannedColors.append(pixelColor)
+                    
+                    # Decipher color to number on tile
+                    match scannedColors[i - int(tile_width / 4)]:
+                        # Blue
+                        case (0, 0, 255):
+                            # Number 1
+                            temp_matrix[y][x] = 1
+                            matchFailed = False
+                            break
+                        # Green
+                        case (0, 123, 0):
+                            # Number 2
+                            temp_matrix[y][x] = 2
+                            matchFailed = False
+                            break
+                        # Red
+                        case (255, 0, 0):
+                            # Number 3
+                            temp_matrix[y][x] = 3
+                            matchFailed = False
+                            break
+                        # Dark blue
+                        case (0, 0, 123):
+                            # Number 4
+                            temp_matrix[y][x] = 4
+                            matchFailed = False
+                            break
+                        # Dark red
+                        case (123, 0, 0):
+                            # Number 5
+                            temp_matrix[y][x] = 5
+                            matchFailed = False
+                            break
+                        # Cyan
+                        case (0, 123, 123):
+                            # Number 6
+                            temp_matrix[y][x] = 6
+                            matchFailed = False
+                            break
+                        # Black
+                        case (0, 0, 0):
+                            # Number 7
+                            temp_matrix[y][x] = 7
+                            matchFailed = False
+                            break
+                        # Gray
+                        case (123, 123, 123):
+                            # Number 8
+                            temp_matrix[y][x] = 8
+                            matchFailed = False
+                            break
+                        # Background color
+                        case (189, 189, 189):
+                            # Do nothing
+                            continue
+                        # Unknown color detected which is a bug if happens
+                        case _:
+                            # Print scanned colors for debuggin and exit
+                            print("Colors scanned:", scannedColors)
+                            # Debug code 1: means failed to identify number
+                            sys.exit(1)
+                
+                # If no other number could be detected based on the colors scanned it's 0
+                if matchFailed:
+                    # Number 0
+                    temp_matrix[y][x] = 0
+                    
+        # Check if the board is unchanged from last scan
+        if temp_matrix == game_matrix:
+            # Matrix is unchanged, check number of attempts
+            if tries == 0:
+                # If first attempt, retry scan
+                continue
+            elif tries == 1:
+                # Second attempt, wait 1 second and then retry to give game time to update
+                time.sleep(1)
+                continue
+            else:
+                # Third attempt, give up on scan and return 1
+                print("getGameState: Failed to scan")
+                return 1
+        else:
+            # The board is different and scan was successful, update game_matrix and return
+            for i in range(len(temp_matrix)):
+                for j in range(len(temp_matrix[0])):
+                    game_matrix[i][j] = temp_matrix[i][j]
+            
+            return 0
+    
+    # Failsafe, return 2
+    print("getGameState: Dropped off bottom")
+    return 2                
 
 # Clicks a selected tile from its matrix coordinates (pos[0], pos[1])
 # and left clicks if rClick is false, otherwise right clicks
