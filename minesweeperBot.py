@@ -11,6 +11,7 @@ import sys
 import time
 import copy
 import keyboard
+import random
 
 """TARGET COLOR:"""
 TARGETCOLOR = (189, 189, 189)       # Border color of game
@@ -51,15 +52,18 @@ def main():
     # Get the location of the smiley face
     life_pix1, life_pix2 = getLifeLocation(board_coord, tile_coord)
     
-    input("Please update gamestate")
+    #input("Please update gamestate")
     
     counter = 0
-    doScan = True
+    doScan = False
     while True:
+        # If EXITKEY is held, quit
         checkForForceExit()
         
         print("Loop:", counter)
         counter += 1
+        
+        # Break if dead or have won
         life = checkForWin(life_pix1, life_pix2)
         if life != 0:
             break
@@ -72,17 +76,25 @@ def main():
         
         print('\n'.join([' '.join(map(str, row)) for row in game_matrix]).replace("None", "☐").replace("0", " ").replace("-1", "^"))
         
-        action, rClick, chance = chooseBestAction(game_matrix, board_width, board_height)
+        if counter == 1:
+            # If first round, click a random location
+            clickTile((random.randint(0, board_width - 1), random.randint(0, board_height - 1)), False, board_width, board_height, tile_coord, tile_width)
+        else:
+            action, rClick, chance = chooseBestAction(game_matrix, board_width, board_height)
+            
+            if rClick:
+                doScan = False
+            
+            clickTile(action, rClick, board_width, board_height, tile_coord, tile_width)
         
-        if rClick:
-            doScan = False
-        
-        clickTile(action, rClick, board_width, board_height, tile_coord, tile_width)
         
 def checkForForceExit():
-    if keyboard.is_pressed(EXITKEY):
-        print("Emergency stop triggered")
-        sys.exit(0)
+    try:
+        if keyboard.is_pressed(EXITKEY):
+            print("Emergency stop triggered")
+            sys.exit(0)
+    except:
+        pass 
     
 # gets the position of the yellow smiley face which determines whether you're alive, dead, or have won
 # Return value:
@@ -93,7 +105,7 @@ def getLifeLocation(board_coord, tile_coord):
     
     # Align coords with smiley
     x = tile_coord[0]
-    y = (board_coord[1] + tile_coord[1]) / 2
+    y = (board_coord[1] + tile_coord[1]) // 2
     
     # Move right until yellow detected
     while screenshot.getpixel((x, y)) != (255, 255, 0):
@@ -195,9 +207,11 @@ def chooseBestAction(game_matrix, board_width, board_height):
     # the fewest total bombs across all possibilities aka with the lowest probability of death
     
     # Matrix which stores the number of times each tile contains a bomb out of all valid arrangements
-    bomb_matrix = [[0 for _ in range(board_width)] for _ in range (board_height)]
+    bomb_matrix = [[None for _ in range(board_width)] for _ in range (board_height)]
     # Set of all not flagged up tiles adjacent to a number tile
-    up_tiles = {}
+    up_tiles = set()
+    # Number of valid arrangements discovered
+    valid_arrangements = [0]
     
     # Loop through every number tile
     for y in range(board_height):
@@ -213,34 +227,138 @@ def chooseBestAction(game_matrix, board_width, board_height):
                         if (j != 0 or i != 0) and game_matrix[y + j][x + i] == None:
                             up_tiles.add((x + i, y + j))
      
-    # Sets used by checkAllLayouts which store coordinates which are set as a bomb tile or free tile (not bomb)
-    bomb_set = {}
-    free_set = {}
-    checkAllLayouts(game_matrix, bomb_matrix, up_tiles, bomb_set, free_set, board_width, board_height)
+    # Set used by checkAllLayouts which stores coordinates of tiles set as containing a bomb
+    bomb_set = set()
+    # Check all possible bomb layouts and set valid layouts to bomb_matrix
+    checkAllLayouts(game_matrix, bomb_matrix, up_tiles, bomb_set, board_width, board_height, valid_arrangements)
     
-    # Should never be reached
-    print("Fell off bottom")
-    sys.exit(0)
+    # Find best action where bomb_matrix has the fewest possible bombs
+    min_bombs = float('inf')
+    min_tile = (-1, -1)
+    for y in range(board_height):
+        for x in range(board_width):
+            if game_matrix[y][x] is None and bomb_matrix[y][x] is not None and bomb_matrix[y][x] < min_bombs:
+                min_bombs = bomb_matrix[y][x]
+                min_tile = (x, y)
+    
+    # Determine probability of staying alive after action
+    probability = 0
+    if min_bombs > 0 and valid_arrangements[0] > 0:
+        probability = min_bombs / valid_arrangements[0]
+        
+    print(f"Valid arrangements: {valid_arrangements[0]}")
+    print(f"Best action: {min_tile} with {min_bombs} bombs")
+
+    
+    # Return action location, rClick, and probability of success
+    return min_tile, False, probability
                             
 # Helper function of chooseBestAction()
 # Checks every possible layout of bombs on tiles adjacent to number tiles
-def checkAllLayouts(game_matrix, bomb_matrix, up_tiles, old_bomb_set, old_free_set, board_width, board_height):
-    # Create copies of bomb_set and free_set to not modify the originals
-    bomb_set = old_bomb_set.copy()
-    free_set = old_free_set.copy()
+def checkAllLayouts(game_matrix, bomb_matrix, up_tiles, old_bomb_set, board_width, board_height, valid_arrangements):
+    # Create copy of bomb_set to not modify the original
+    bomb_set = set()
+    if old_bomb_set is not None:
+        bomb_set = old_bomb_set.copy()
     
     # For every element in up_tiles set
     if len(up_tiles) != 0:
-        tile = up_tiles.pop()
+        tile = next(iter(up_tiles))
+        remaining_up_tiles = up_tiles.copy()
+        remaining_up_tiles.remove(tile)
         
-        # Set popped tile as either bomb or free tile, recur
-        checkAllLayouts(game_matrix, bomb_matrix, up_tiles, bomb_set.add(tile), free_set, board_width, board_height)
-        checkAllLayouts(game_matrix, bomb_matrix, up_tiles, bomb_set, free_set.add(tile), board_width, board_height)
-    # Once all elements in either bomb_set or free_set, check if configuration is valid based on number tiles
+        bomb_set_with_tile = bomb_set.copy()
+        bomb_set_with_tile.add(tile)
+        if len(up_tiles) != 0:
+            print(f"Recursing with {len(up_tiles)} tiles...")
+            
+        # Check if tile layout is consistent / valid
+        if not isConsistent(game_matrix, bomb_set_with_tile, board_width, board_height):
+            return  # prune this branch
+        
+        # Set popped tile as either bomb (add to bomb_set) or free tile (don't add), recursively call through all elements
+        checkAllLayouts(game_matrix, bomb_matrix, remaining_up_tiles, bomb_set_with_tile, board_width, board_height, valid_arrangements)
+        checkAllLayouts(game_matrix, bomb_matrix, remaining_up_tiles, bomb_set, board_width, board_height, valid_arrangements)
+        
+    # Once all elements have been iterated through, check if configuration is valid based on number tiles
     else:
-        # 
+        # Iterate through all number tiles
+        for y in range(board_height):
+            for x in range(board_width):
+                if game_matrix[y][x] != None and game_matrix[y][x] != -1:
+                    # Count for all adjacent bombs to number tile
+                    bombs = 0
+                    
+                    # Check all adjacent tiles
+                    for j in range(-1, 2):
+                        for i in range(-1, 2):
+                            # Bounds check
+                            if y + j < 0 or y + j >= board_height or x + i < 0 or x + i >= board_width:
+                                continue
+                            
+                            # Don't check number tile
+                            if j != 0 or i != 0:
+                                # If tile is a flag, increment bombs count
+                                if game_matrix[y + j][x + i] == -1:
+                                    bombs += 1
+                                    
+                                # If tile is in bomb_set, increment bombs count
+                                elif (x + i, y + j) in bomb_set:
+                                    bombs += 1
+                                    
+                                # If tile is not a flag
+                                if game_matrix[y + j][x + i] != -1:
+                                    # Change None to 0 in bomb_matrix since to add tile as possible action
+                                    if game_matrix[y + j][x + i] is None:
+                                        if bomb_matrix[y + j][x + i] is None:
+                                            bomb_matrix[y + j][x + i] = 0
                 
+                    # If the number of bombs does not equal the tile number, arrangement is invalid
+                    if bombs != game_matrix[y][x]:
+                        return
+                    
+        # If every tile had a valid arrangement, add arrangement to bomb_matrix
+        while len(bomb_set) != 0:
+            # Get bomb coordinate
+            x, y = bomb_set.pop()
+            # Increment value at gotten location
+            if bomb_matrix[y][x] is None:
+                bomb_matrix[y][x] = 1
+            else:
+                bomb_matrix[y][x] += 1
+        
+        # Also increment valid_arrangements
+        valid_arrangements[0] += 1
     
+# Helper function for checkAllLayouts
+# Checks if a layout around a specific number tile is valid
+# Return values:
+# True:     Layout is consistent
+# False:    Layout is not consistent
+def isConsistent(game_matrix, bomb_set, board_width, board_height):
+    for y in range(board_height):
+        for x in range(board_width):
+            if game_matrix[y][x] is not None and game_matrix[y][x] != -1:
+                bombs = 0
+                unknowns = 0
+
+                for j in range(-1, 2):
+                    for i in range(-1, 2):
+                        nx, ny = x + i, y + j
+                        if 0 <= nx < board_width and 0 <= ny < board_height and (i != 0 or j != 0):
+                            if game_matrix[ny][nx] == -1 or (nx, ny) in bomb_set:
+                                bombs += 1
+                            elif game_matrix[ny][nx] is None and (nx, ny) not in bomb_set:
+                                unknowns += 1
+
+                number = game_matrix[y][x]
+                
+                # Prune if too many bombs already placed, or too few left to reach number
+                if bombs > number:
+                    return False
+                if bombs + unknowns < number:
+                    return False
+    return True
 
 # Gets the current state of the game board ie where the numbers are, and sets them to the inputted game_matrix
 # Return values:
@@ -332,8 +450,7 @@ def getGameState(game_matrix, board_width, board_height, tile_coord, tile_width)
                         case _:
                             # Print scanned colors for debuggin and exit
                             print("Colors scanned:", scannedColors)
-                            # Debug code 1: means failed to identify number
-                            sys.exit(1)
+                            raise RuntimeError("Unknown color detected during getGameState(). Colors scanned: " + str(scannedColors))
                 
                 # If no other number could be detected based on the colors scanned it's 0
                 if matchFailed:
